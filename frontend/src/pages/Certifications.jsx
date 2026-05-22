@@ -1,7 +1,6 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useAssetifyStore } from '@/store/useAssetifyStore'
 import { useToastStore } from '@/store/useToastStore'
-import { BADGES_DATA } from '@/constants/mockData'
 import { GlassCard } from '@/components/ui/GlassCard'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -11,19 +10,24 @@ import {
   Building2, Car, Crown, Coins, ShieldAlert, Sparkles
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
-
-const MOCK_LEADERBOARD = [
-  { rank: 1, name: 'Marcus Sterling', xp: 4850, badge: 'Birkin Broker', avatar: 'M' },
-  { rank: 2, name: 'Clara Dupont', xp: 3920, badge: 'Cap Rate Crusader', avatar: 'C' },
-  { rank: 3, name: 'Hassan Al-Fayed', xp: 3450, badge: 'Inflation Defier', avatar: 'H' },
-  { rank: 4, name: 'Sofia Rodriguez', xp: 2900, badge: 'Birkin Broker', avatar: 'S' }
-]
+import { appService } from '@/services/api'
 
 export const Certifications = () => {
   const { user } = useAssetifyStore()
   const { toast } = useToastStore()
 
   const [activeCert, setActiveCert] = useState(null)
+  const [badges, setBadges] = useState([])
+  const [earnedBadgeIds, setEarnedBadgeIds] = useState([])
+  const [leaderboard, setLeaderboard] = useState([])
+
+  useEffect(() => {
+    appService.getBadges().then((response) => {
+      setBadges(response.badges || [])
+      setEarnedBadgeIds(response.earnedBadgeIds || [])
+      setLeaderboard(response.leaderboard || [])
+    }).catch(() => {})
+  }, [])
 
   const badgeIcons = {
     Compass: <Compass size={16} />,
@@ -40,9 +44,6 @@ export const Certifications = () => {
       type: 'success'
     })
   }
-
-  // Filter earned badges based on user XP
-  const earnedBadgeIds = BADGES_DATA.filter(b => user.xp >= b.xpRequired).map(b => b.id)
 
   return (
     <div className="flex flex-col gap-6 select-none text-left">
@@ -76,11 +77,12 @@ export const Certifications = () => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
-              {BADGES_DATA.map((badge) => {
-                const isUnlocked = earnedBadgeIds.includes(badge.id)
+              {badges.map((badge) => {
+                const badgeId = badge.stableId || badge.id || badge._id
+                const isUnlocked = earnedBadgeIds.includes(badgeId)
                 return (
                   <div
-                    key={badge.id}
+                    key={badgeId}
                     className={cn(
                       'p-4.5 rounded-2xl border transition-all duration-300 flex items-start gap-3.5 relative overflow-hidden bg-surface-elevated/25 hover:bg-surface-elevated/45',
                       isUnlocked ? 'border-luxury-emerald/30' : 'border-border/60 opacity-60'
@@ -146,7 +148,7 @@ export const Certifications = () => {
             </div>
 
             <div className="flex flex-col gap-3">
-              {MOCK_LEADERBOARD.map((usr) => (
+              {leaderboard.map((usr) => (
                 <div
                   key={usr.rank}
                   className="flex items-center justify-between p-3 rounded-xl border border-border bg-surface-elevated/25"

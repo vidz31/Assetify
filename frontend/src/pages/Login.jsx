@@ -6,6 +6,7 @@ import { GlassCard } from '@/components/ui/GlassCard'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Mail, Lock, ShieldCheck } from 'lucide-react'
+import { authService } from '@/services/api'
 
 export const Login = () => {
   const navigate = useNavigate()
@@ -17,7 +18,7 @@ export const Login = () => {
   const [errors, setErrors] = useState({})
   const [isLoading, setIsLoading] = useState(false)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     const currentErrors = {}
 
@@ -32,17 +33,28 @@ export const Login = () => {
     setErrors({})
     setIsLoading(true)
 
-    // Simulate database lookup latency
-    setTimeout(() => {
-      setIsLoading(false)
-      login(email, password)
+    try {
+      const response = await authService.login(email, password)
+      
+      if (response.success) {
+        login(response.user)
+        toast({
+          title: 'Authentication Authorized',
+          description: 'Welcome back to the Assetify Control Console.',
+          type: 'success'
+        })
+        navigate('/dashboard')
+      }
+    } catch (error) {
+      setErrors({ submit: error.message })
       toast({
-        title: 'Authentication Authorized',
-        description: 'Welcome back to the Assetify Control Console.',
-        type: 'success'
+        title: 'Authentication Failed',
+        description: error.message,
+        type: 'error'
       })
-      navigate('/dashboard')
-    }, 1500)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -86,6 +98,12 @@ export const Login = () => {
               error={errors.password}
               icon={<Lock size={14} />}
             />
+
+            {errors.submit && (
+              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-sm">
+                {errors.submit}
+              </div>
+            )}
 
             {/* Forgot passphrase link */}
             <div className="text-right select-none">

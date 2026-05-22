@@ -64,18 +64,25 @@ export const Onboarding = () => {
     setStep((prev) => prev + 1)
   }
 
-  const handleActivateFunds = () => {
+  const handleActivateFunds = async () => {
     setIsActivatingFunds(true)
-    setTimeout(() => {
+    try {
+      await completeOnboarding(selectedInterests, riskProfile)
       setIsActivatingFunds(false)
-      completeOnboarding(selectedInterests, riskProfile)
       setStep(4)
       toast({
         title: 'Console Initialized',
         description: 'Account parameters set. Sandbox balance loaded.',
         type: 'gold'
       })
-    }, 2000)
+    } catch (error) {
+      setIsActivatingFunds(false)
+      toast({
+        title: 'Initialization Failed',
+        description: error.message,
+        type: 'error'
+      })
+    }
   }
 
   const handleFinishOnboarding = () => {

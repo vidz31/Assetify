@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAssetifyStore } from '@/store/useAssetifyStore'
 import { useToastStore } from '@/store/useToastStore'
@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { motion, AnimatePresence } from 'framer-motion'
+import { appService } from '@/services/api'
 
 export const DashboardLayout = () => {
   const navigate = useNavigate()
@@ -23,16 +24,18 @@ export const DashboardLayout = () => {
   const [notifTrayOpen, setNotifTrayOpen] = useState(false)
   const [streakOpen, setStreakOpen] = useState(false)
 
-  // Mock Notifications
-  const [notifications, setNotifications] = useState([
-    { id: '1', title: 'Market Alert: Gold Surge', desc: 'Zurich bullion rose +0.85% today.', read: false },
-    { id: '2', title: 'Achievement Unlocked', desc: 'Rookie Investor badge awarded.', read: true },
-    { id: '3', title: 'New Lesson Available', desc: 'Explore Luxury Watches index metrics.', read: false }
-  ])
+  const [notifications, setNotifications] = useState([])
+
+  useEffect(() => {
+    appService.getNotifications()
+      .then((response) => setNotifications(response.notifications || []))
+      .catch(() => {})
+  }, [])
 
   const unreadCount = notifications.filter(n => !n.read).length
 
-  const markAllRead = () => {
+  const markAllRead = async () => {
+    await appService.markNotificationsRead().catch(() => {})
     setNotifications(prev => prev.map(n => ({ ...n, read: true })))
     toast({
       title: 'Notifications Cleared',
@@ -58,7 +61,7 @@ export const DashboardLayout = () => {
     { label: 'AI Advisor', path: '/advisor', icon: Cpu },
     { label: 'Knowledge Graph', path: '/knowledge', icon: Building2 },
     { label: 'Certifications', path: '/certifications', icon: FileBadge },
-    { label: 'Market Insights', path: '/market', icon: Landmark },
+    { label: 'Market & Simulators', path: '/market', icon: Landmark },
     { label: 'Community', path: '/community', icon: Users },
   ]
 
@@ -247,7 +250,7 @@ export const DashboardLayout = () => {
                         {notifications.length > 0 ? (
                           notifications.map((notif) => (
                             <div
-                              key={notif.id}
+                              key={notif._id || notif.id}
                               className={cn(
                                 'p-3 border-b border-border/60 text-xs flex flex-col gap-0.5 transition-colors',
                                 !notif.read ? 'bg-luxury-emerald/5' : 'bg-transparent'

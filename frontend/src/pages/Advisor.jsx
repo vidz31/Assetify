@@ -9,6 +9,7 @@ import {
   TrendingUp, Compass, Target
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
+import { appService } from '@/services/api'
 
 export const Advisor = () => {
   const { user, portfolio } = useAssetifyStore()
@@ -31,7 +32,15 @@ export const Advisor = () => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isTyping])
 
-  const handleSendMessage = (text) => {
+  useEffect(() => {
+    appService.getAdvisorMessages().then((response) => {
+      if (response.messages?.length) {
+        setMessages(response.messages.map((msg) => ({ sender: msg.sender, text: msg.text })))
+      }
+    }).catch(() => {})
+  }, [])
+
+  const handleSendMessage = async (text) => {
     if (!text.trim()) return
 
     const userMessage = { sender: 'user', text }
@@ -39,28 +48,14 @@ export const Advisor = () => {
     setInputValue('')
     setIsTyping(true)
 
-    // Simulate smart AI analysis responses
-    setTimeout(() => {
-      let response = "That is a complex asset dynamics problem. Tangible assets require careful yield calculation (rental yields vs capitalization trends). Tell me, are you prioritizing monthly cash flows or inflation hedges?"
-      
-      const lower = text.toLowerCase()
-      if (lower.includes('analyze') || lower.includes('portfolio')) {
-        const holdingNames = portfolio.map(h => `${h.quantity}x ${h.name}`).join(', ')
-        const cashValue = user.virtualBalance
-        if (portfolio.length === 0) {
-          response = `Your virtual balance holds $${cashValue.toLocaleString()} in raw Cash. You have no simulated property or collectible assets. Recommendation: Head to the Sandbox catalog and fractionalize a Manhattan Penthouse to begin earning monthly rental cap yields.`
-        } else {
-          response = `Portfolio Diagnostic:\nYou currently hold: ${holdingNames}. Cash balance: $${cashValue.toLocaleString()}.\n\nAllocation Risk Profile: ${user.riskProfile || 'Moderate'}.\n\nSuggestions:\n1. Diversify your holdings. If you are heavy on classic supercars, balance them out with 99.99% pure Gold Bullion physical hedges.\n2. Reinvest rental proceeds from tokenized properties back into index modules.`
-        }
-      } else if (lower.includes('gold') || lower.includes('real estate')) {
-        response = "Hedge Comparison:\n\n1. Physical Gold: Holds zero counterparty risk, has negative correlation with nominal interest rates, and behaves as an absolute store of purchasing power (inflation hedge) during major CPI increases.\n\n2. Real Estate: Generates net operating yields (5-8% rental cap rates) and captures asset appreciation over time. However, it is less liquid and subject to vacancy risk. Tokenization allows fractional entries."
-      } else if (lower.includes('scarcity') || lower.includes('car')) {
-        response = "Scarcity Premium Dynamics:\nLimited-run supercars (like the Porsche 911 GT3 RS) do not follow standard depreciation curves. Because manufactures limit dealership allocations, secondary market demand spikes immediately, causing secondary trade premiums where cars sell far above original MSRP. Commuter models, on the other hand, lose 15-20% value in year one."
-      }
-
-      setMessages((prev) => [...prev, { sender: 'assistant', text: response }])
+    try {
+      const response = await appService.sendAdvisorMessage(text)
+      setMessages((prev) => [...prev, { sender: 'assistant', text: response.reply }])
+    } catch (error) {
+      toast({ title: 'Advisor Failed', description: error.message, type: 'error' })
+    } finally {
       setIsTyping(false)
-    }, 1800)
+    }
   }
 
   return (

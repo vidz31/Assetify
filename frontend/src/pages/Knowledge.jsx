@@ -1,17 +1,29 @@
-import React, { useState } from 'react'
-import { KNOWLEDGE_GRAPH_DATA } from '@/constants/mockData'
+import React, { useEffect, useState } from 'react'
 import { GlassCard } from '@/components/ui/GlassCard'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Info, HelpCircle, Network, Search, Award } from 'lucide-react'
 import { cn } from '@/utils/cn'
+import { appService } from '@/services/api'
 
 export const Knowledge = () => {
-  const [selectedNode, setSelectedNode] = useState(KNOWLEDGE_GRAPH_DATA.nodes[0])
+  const [graph, setGraph] = useState({ nodes: [], links: [] })
+  const [selectedNode, setSelectedNode] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
 
+  useEffect(() => {
+    appService.getKnowledgeGraph().then((response) => {
+      if (response?.graph?.nodes) {
+        setGraph(response.graph)
+        if (response.graph.nodes.length > 0) {
+          setSelectedNode(response.graph.nodes[0])
+        }
+      }
+    }).catch(() => {})
+  }, [])
+
   // Filter nodes for search highlight
-  const highlightedNodeIds = KNOWLEDGE_GRAPH_DATA.nodes
+  const highlightedNodeIds = graph.nodes
     .filter((n) => searchQuery && n.label.toLowerCase().includes(searchQuery.toLowerCase()))
     .map((n) => n.id)
 
@@ -68,9 +80,9 @@ export const Knowledge = () => {
 
           <svg className="w-full h-full cursor-grab active:cursor-grabbing" viewBox="-400 -300 800 600">
             {/* Draw Links */}
-            {KNOWLEDGE_GRAPH_DATA.links.map((link, idx) => {
-              const sourceNode = KNOWLEDGE_GRAPH_DATA.nodes.find((n) => n.id === link.source)
-              const targetNode = KNOWLEDGE_GRAPH_DATA.nodes.find((n) => n.id === link.target)
+            {graph.links.map((link, idx) => {
+              const sourceNode = graph.nodes.find((n) => n.id === link.source)
+              const targetNode = graph.nodes.find((n) => n.id === link.target)
               if (!sourceNode || !targetNode) return null
 
               return (
@@ -86,8 +98,8 @@ export const Knowledge = () => {
             })}
 
             {/* Draw Nodes */}
-            {KNOWLEDGE_GRAPH_DATA.nodes.map((node) => {
-              const isSelected = selectedNode.id === node.id
+            {graph.nodes.map((node) => {
+              const isSelected = selectedNode?.id === node.id
               const isHighlighted = highlightedNodeIds.includes(node.id)
               const nodeRadius = node.val + 2
 
@@ -155,7 +167,7 @@ export const Knowledge = () => {
                 <Info size={12} /> Node Inspector
               </span>
               <h3 className="text-sm font-bold text-text-primary mt-1 font-outfit uppercase tracking-wide">
-                {selectedNode.label}
+                {selectedNode?.label || 'Loading'}
               </h3>
             </div>
 
@@ -163,7 +175,7 @@ export const Knowledge = () => {
             <div className="flex flex-col gap-1 text-[11px] text-text-secondary leading-relaxed select-text">
               <span className="text-[9px] text-text-muted font-bold tracking-wider uppercase mb-1 block">Description</span>
               <p className="bg-surface-elevated/45 border border-border p-3.5 rounded-xl">
-                {selectedNode.desc}
+                {selectedNode?.desc || 'Loading graph from database.'}
               </p>
             </div>
 
@@ -171,8 +183,8 @@ export const Knowledge = () => {
             <div className="flex flex-col gap-1.5 select-none pt-2">
               <span className="text-[9px] text-text-muted font-bold tracking-wider uppercase">Domain Branch</span>
               <div className="flex gap-2">
-                <Badge variant={selectedNode.group === 1 ? 'emerald' : selectedNode.group === 2 ? 'blue' : selectedNode.group === 0 ? 'gold' : 'gray'}>
-                  {selectedNode.group === 0 ? 'Core Root' : selectedNode.group === 1 ? 'Real Estate' : selectedNode.group === 2 ? 'Automobiles' : selectedNode.group === 3 ? 'Luxury' : 'Precious Metals'}
+                <Badge variant={selectedNode?.group === 1 ? 'emerald' : selectedNode?.group === 2 ? 'blue' : selectedNode?.group === 0 ? 'gold' : 'gray'}>
+                  {selectedNode?.group === 0 ? 'Core Root' : selectedNode?.group === 1 ? 'Real Estate' : selectedNode?.group === 2 ? 'Automobiles' : selectedNode?.group === 3 ? 'Luxury' : 'Precious Metals'}
                 </Badge>
               </div>
             </div>

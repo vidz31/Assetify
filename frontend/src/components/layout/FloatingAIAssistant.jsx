@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { MessageSquare, X, Send, Cpu, Sparkles } from 'lucide-react'
 import { cn } from '@/utils/cn'
+import { appService } from '@/services/api'
 
 export const FloatingAIAssistant = () => {
   const [isOpen, setIsOpen] = useState(false)
@@ -22,7 +23,7 @@ export const FloatingAIAssistant = () => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isTyping])
 
-  const handleSend = (textToSend) => {
+  const handleSend = async (textToSend) => {
     if (!textToSend.trim()) return
 
     const newMsg = { sender: 'user', text: textToSend }
@@ -30,22 +31,14 @@ export const FloatingAIAssistant = () => {
     setInputVal('')
     setIsTyping(true)
 
-    // Generate mock smart responses based on input queries
-    setTimeout(() => {
-      let reply = "That is a great question. Tangible assets require careful valuation! Could you clarify if you are tracking cash flows (yield) or long-term capital gains?"
-      const lowercaseQuery = textToSend.toLowerCase()
-      
-      if (lowercaseQuery.includes('cap rate') || lowercaseQuery.includes('calculate')) {
-        reply = "Cap Rate = Net Operating Income (NOI) / Property Purchase Price. Example: A property generates $64,000 NOI annually and costs $1,000,000. Cap Rate = $64,000 / $1,000,000 = 6.4%. Standard yields range from 5% to 8% in high-demand metros."
-      } else if (lowercaseQuery.includes('car') || lowercaseQuery.includes('vintage') || lowercaseQuery.includes('porsche')) {
-        reply = "Classic automobiles fluctuate based on historical rarity. The Porsche 911 GT3 RS (992) appreciates due to dealer allocation limits: buyers pay a 'scarcity premium' over MSRP on the secondary market. Standard commuter cars, by contrast, depreciate 15-20% annually."
-      } else if (lowercaseQuery.includes('gold') || lowercaseQuery.includes('cpi') || lowercaseQuery.includes('inflation')) {
-        reply = "Gold acts as a macro inflation hedge because it has zero counterparty risk and limited global supply. When real yields (interest rates minus inflation) turn negative, gold prices typically rally as the opportunity cost of holding non-yielding bullion drops."
-      }
-
-      setMessages((prev) => [...prev, { sender: 'assistant', text: reply }])
+    try {
+      const response = await appService.sendAdvisorMessage(textToSend)
+      setMessages((prev) => [...prev, { sender: 'assistant', text: response.reply }])
+    } catch {
+      setMessages((prev) => [...prev, { sender: 'assistant', text: 'I could not reach the advisor backend. Please check your session and server.' }])
+    } finally {
       setIsTyping(false)
-    }, 1800)
+    }
   }
 
   return (

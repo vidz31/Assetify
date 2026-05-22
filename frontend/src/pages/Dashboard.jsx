@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAssetifyStore } from '@/store/useAssetifyStore'
 import { GlassCard } from '@/components/ui/GlassCard'
@@ -14,33 +14,31 @@ import {
   Briefcase, Plus, UserCheck, ChevronRight
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
-
-// Mock net worth historic graph data
-const NET_WORTH_HISTORY = [
-  { month: 'Jan', value: 1000000 },
-  { month: 'Feb', value: 1005000 },
-  { month: 'Mar', value: 998000 },
-  { month: 'Apr', value: 1012000 },
-  { month: 'May', value: 1034000 }
-]
+import { appService } from '@/services/api'
 
 const PIE_COLORS = ['#10b981', '#fbbf24', '#3b82f6', '#8b5cf6']
 
 export const Dashboard = () => {
   const { user, portfolio, transactions } = useAssetifyStore()
+  const [dashboard, setDashboard] = useState(null)
+
+  useEffect(() => {
+    appService.getDashboard().then((response) => setDashboard(response.dashboard)).catch(() => {})
+  }, [])
 
   // Calculate stats
   const portfolioValue = useMemo(() => {
     return portfolio.reduce((sum, h) => sum + (h.currentPrice * h.quantity), 0)
   }, [portfolio])
 
-  const totalValue = portfolioValue + user.virtualBalance
+  const totalValue = dashboard?.totalValue ?? portfolioValue + user.virtualBalance
   const totalInvested = portfolio.reduce((sum, h) => sum + (h.buyPrice * h.quantity), 0)
-  const unrealizedProfit = portfolioValue - totalInvested
+  const unrealizedProfit = dashboard?.unrealizedProfit ?? portfolioValue - totalInvested
   const profitPercent = totalInvested > 0 ? (unrealizedProfit / totalInvested) * 100 : 0
 
   // Asset distribution data
   const distributionData = useMemo(() => {
+    if (dashboard?.allocation) return dashboard.allocation
     const categories = {}
     portfolio.forEach(h => {
       categories[h.category] = (categories[h.category] || 0) + (h.currentPrice * h.quantity)
@@ -51,7 +49,11 @@ export const Dashboard = () => {
       name: name === 'real-estate' ? 'Real Estate' : name === 'automobile' ? 'Auto' : name === 'luxury' ? 'Luxury' : name,
       value: val
     }))
-  }, [portfolio, user.virtualBalance])
+  }, [portfolio, user.virtualBalance, dashboard])
+
+  const chartHistory = dashboard?.history || []
+  const dashboardTransactions = dashboard?.transactions || transactions
+  const recommendations = dashboard?.recommendations || []
 
   return (
     <div className="flex flex-col gap-6 select-none text-left">
@@ -127,9 +129,9 @@ export const Dashboard = () => {
             </h3>
             <Badge variant="emerald" glow>Live Sync</Badge>
           </div>
-          <div className="flex-1 h-full min-h-[220px]">
+          <div className="h-[220px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={NET_WORTH_HISTORY} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+              <AreaChart data={chartHistory} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorNetWorth" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
@@ -219,7 +221,7 @@ export const Dashboard = () => {
         </GlassCard>
       </div>
 
-      {/* 3. TRANS ledgers & MOCK RECOMMENDATIONS */}
+      {/* 3. Transaction ledgers & database recommendations */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <GlassCard className="lg:col-span-2 flex flex-col gap-4 min-h-[250px]" hoverEffect={false}>
           <div className="flex items-center justify-between">
@@ -234,8 +236,8 @@ export const Dashboard = () => {
           </div>
 
           <div className="flex-1 overflow-y-auto max-h-[200px] flex flex-col gap-2">
-            {transactions.length > 0 ? (
-              transactions.map((tx) => (
+            {dashboardTransactions.length > 0 ? (
+              dashboardTransactions.map((tx) => (
                 <div
                   key={tx.id}
                   className="flex items-center justify-between p-3 rounded-xl border border-border bg-surface-elevated/25 hover:bg-surface-elevated/45 transition-colors"
@@ -279,7 +281,7 @@ export const Dashboard = () => {
               Consolidated Recommendations
             </h3>
             <p className="text-[10px] text-text-muted leading-relaxed mt-1 select-none">
-              Based on your calibrated preferences and active portfolio allocation index:
+                  Based on database-backed preferences and active portfolio allocation index:
             </p>
           </div>
 
@@ -287,9 +289,9 @@ export const Dashboard = () => {
             <div className="flex items-start gap-2.5 p-2 rounded-xl bg-luxury-gold/5 border border-luxury-gold/25 select-none">
               <Plus size={16} className="text-luxury-gold shrink-0 mt-0.5" />
               <div className="flex flex-col gap-0.5 text-left">
-                <span className="text-xs font-bold text-text-primary">Hedging Check Required</span>
+                <span className="text-xs font-bold text-text-primary">Portfolio Check</span>
                 <span className="text-[9px] text-text-secondary leading-relaxed">
-                  Your portfolio allocation is light on precious metals. Consider simulated physical gold hedges.
+                  {recommendations[0] || 'Load the Sandbox catalog to generate your first database recommendation.'}
                 </span>
               </div>
             </div>
@@ -299,7 +301,7 @@ export const Dashboard = () => {
               <div className="flex flex-col gap-0.5 text-left">
                 <span className="text-xs font-bold text-text-primary">Academy Recommendation</span>
                 <span className="text-[9px] text-text-secondary leading-relaxed">
-                  Start the "Automobile Depreciation Curves" lesson to maximize collectible supercar yields.
+                  {recommendations[1] || 'Complete Academy lessons to improve personalized suggestions.'}
                 </span>
               </div>
             </div>

@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { useAssetifyStore } from '@/store/useAssetifyStore'
 import { useToastStore } from '@/store/useToastStore'
-import { SANDBOX_ASSETS } from '@/constants/mockData'
 import { GlassCard } from '@/components/ui/GlassCard'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -13,44 +12,46 @@ import {
 import { cn } from '@/utils/cn'
 
 export const Sandbox = () => {
-  const { user, portfolio, buyAsset, sellAsset, updateAssetPrices } = useAssetifyStore()
+  const { user, portfolio, assets, buyAsset, sellAsset, syncSandbox } = useAssetifyStore()
   const { toast } = useToastStore()
 
   const [activeTab, setActiveTab] = useState('all')
-  const [selectedAsset, setSelectedAsset] = useState(SANDBOX_ASSETS[0])
+  const [selectedAsset, setSelectedAsset] = useState(null)
   const [tradeType, setTradeType] = useState('BUY') // BUY or SELL
   const [tradeQuantity, setTradeQuantity] = useState(1)
   const [isUpdating, setIsUpdating] = useState(false)
 
-  // Auto fluctuating simulator
   useEffect(() => {
-    const timer = setInterval(() => {
-      updateAssetPrices()
-    }, 15000) // update portfolio fluctuations every 15s
-    return () => clearInterval(timer)
-  }, [updateAssetPrices])
+    syncSandbox()
+  }, [syncSandbox])
+
+  useEffect(() => {
+    if (!selectedAsset && assets.length > 0) {
+      setSelectedAsset(assets[0])
+    }
+  }, [assets, selectedAsset])
 
   const handleManualPriceSync = () => {
     setIsUpdating(true)
-    setTimeout(() => {
-      updateAssetPrices()
+    syncSandbox().finally(() => {
       setIsUpdating(false)
       toast({
-        title: 'Indices Fluctuated',
-        description: 'Global asset prices synchronized against virtual inflation parameters.',
+        title: 'Indices Synced',
+        description: 'Asset catalog and portfolio values refreshed from database.',
         type: 'info'
       })
-    }, 800)
+    })
   }
 
   // Filter assets
   const filteredAssets = useMemo(() => {
-    if (activeTab === 'all') return SANDBOX_ASSETS
-    return SANDBOX_ASSETS.filter((a) => a.category === activeTab)
-  }, [activeTab])
+    if (activeTab === 'all') return assets
+    return assets.filter((a) => a.category === activeTab)
+  }, [activeTab, assets])
 
   // Get active holding in portfolio
   const activeHolding = useMemo(() => {
+    if (!selectedAsset) return null
     return portfolio.find((h) => h.id === selectedAsset.id)
   }, [portfolio, selectedAsset])
 
@@ -69,38 +70,38 @@ export const Sandbox = () => {
     { id: 'gold', label: 'Gold' }
   ]
 
-  const totalCost = selectedAsset.price * tradeQuantity
+  const totalCost = (selectedAsset?.price || 0) * tradeQuantity
 
-  const handleExecuteTrade = () => {
-    if (tradeQuantity <= 0) return
+  const handleExecuteTrade = async () => {
+    if (tradeQuantity <= 0 || !selectedAsset) return
 
     if (tradeType === 'BUY') {
-      const success = buyAsset(selectedAsset, tradeQuantity, selectedAsset.price)
-      if (success) {
+      try {
+        await buyAsset(selectedAsset, tradeQuantity)
         toast({
           title: 'Trade Executed',
           description: `Simulated BUY of ${tradeQuantity} shares in ${selectedAsset.name}.`,
           type: 'success'
         })
-      } else {
+      } catch (error) {
         toast({
           title: 'Margin Depleted',
-          description: 'Insufficient cash balance to cover simulated acquisition cost.',
+          description: error.message,
           type: 'error'
         })
       }
     } else {
-      const success = sellAsset(selectedAsset.id, tradeQuantity, selectedAsset.price)
-      if (success) {
+      try {
+        await sellAsset(selectedAsset.id, tradeQuantity)
         toast({
           title: 'Trade Executed',
           description: `Simulated SELL of ${tradeQuantity} shares in ${selectedAsset.name}.`,
           type: 'success'
         })
-      } else {
+      } catch (error) {
         toast({
           title: 'Insufficient Shares',
-          description: 'You do not own enough virtual shares to complete this transaction.',
+          description: error.message,
           type: 'error'
         })
       }
@@ -158,7 +159,7 @@ export const Sandbox = () => {
                 onClick={() => setSelectedAsset(asset)}
                 className={cn(
                   'p-5 flex flex-col gap-4 cursor-pointer',
-                  selectedAsset.id === asset.id ? 'border-luxury-emerald bg-luxury-emerald/5' : ''
+                  selectedAsset?.id === asset.id ? 'border-luxury-emerald bg-luxury-emerald/5' : ''
                 )}
               >
                 <div className="relative h-32 rounded-xl overflow-hidden border border-border/60">
@@ -202,6 +203,8 @@ export const Sandbox = () => {
         {/* Trade Execution Panel */}
         <div className="lg:col-span-1">
           <GlassCard glowColor="emerald" className="p-6 flex flex-col gap-5 select-none" hoverEffect={false}>
+            {selectedAsset && (
+            <>
             {/* Header info */}
             <div className="flex flex-col gap-1.5 border-b border-border pb-4">
               <span className="text-[9px] text-text-emerald font-extrabold uppercase tracking-widest flex items-center gap-1">
@@ -287,6 +290,8 @@ export const Sandbox = () => {
             >
               EXECUTE SIMULATED {tradeType}
             </Button>
+            </>
+            )}
           </GlassCard>
         </div>
       </div>

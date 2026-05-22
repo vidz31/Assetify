@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { authService, learningService, sandboxService } from '@/services/api'
 
 const INITIAL_USER = {
   name: '',
@@ -26,50 +27,72 @@ export const useAssetifyStore = create(
       portfolio: [],
       transactions: [],
       learning: { ...INITIAL_LEARNING },
+      assets: [],
 
       // Auth actions
-      login: (email, password) => {
+      setUserFromApi: (apiUser) => {
         set({
           isLoggedIn: true,
           user: {
             ...INITIAL_USER,
-            name: email.split('@')[0],
-            email,
+            ...apiUser,
+            id: apiUser.id || apiUser._id,
+            streak: apiUser.streak || 1,
+            interests: apiUser.interests || []
+          }
+        })
+      },
+      hydrateSession: async () => {
+        const token = localStorage.getItem('authToken')
+        if (!token) return false
+        try {
+          const response = await authService.getCurrentUser()
+          get().setUserFromApi(response.user)
+          await get().syncSandbox()
+          await get().syncLearningProgress()
+          return true
+        } catch {
+          get().logout()
+          return false
+        }
+      },
+      login: (userOrEmail) => {
+        if (typeof userOrEmail === 'object') {
+          get().setUserFromApi(userOrEmail)
+          return
+        }
+        set({
+          isLoggedIn: true,
+          user: {
+            ...INITIAL_USER,
+            name: userOrEmail.split('@')[0],
+            email: userOrEmail,
             streak: 1
           }
         })
       },
-      register: (name, email, password) => {
-        set({
-          isLoggedIn: true,
-          user: {
-            ...INITIAL_USER,
-            name,
-            email,
-            streak: 1
-          }
-        })
+      register: (userOrName, email) => {
+        if (typeof userOrName === 'object') {
+          get().setUserFromApi(userOrName)
+          return
+        }
+        set({ isLoggedIn: true, user: { ...INITIAL_USER, name: userOrName, email, streak: 1 } })
       },
       logout: () => {
+        authService.logout()
         set({
           isLoggedIn: false,
           user: { ...INITIAL_USER },
           portfolio: [],
           transactions: [],
-          learning: { ...INITIAL_LEARNING }
+          learning: { ...INITIAL_LEARNING },
+          assets: []
         })
       },
-      completeOnboarding: (interests, riskProfile) => {
-        set((state) => ({
-          user: {
-            ...state.user,
-            interests,
-            riskProfile,
-            onboarded: true,
-            xp: state.user.xp + 500
-          }
-        }))
-        get().checkLevelUp()
+      completeOnboarding: async (interests, riskProfile) => {
+        const response = await authService.completeOnboarding(interests, riskProfile)
+        get().setUserFromApi({ ...get().user, ...response.user, interests, riskProfile, onboarded: true })
+        return response
       },
 
       // Learning actions
@@ -95,133 +118,76 @@ export const useAssetifyStore = create(
           }))
         }
       },
-      completeLesson: (moduleId, lessonId, xpReward) => {
+      syncLearningProgress: async () => {
+        try {
+          const response = await learningService.getProgress()
+          set((state) => ({
+            user: {
+              ...state.user,
+              xp: response.progress.xp,
+              level: response.progress.level
+            },
+            learning: {
+              ...state.learning,
+              completedLessons: response.progress.completedLessonIds || state.learning.completedLessons
+            }
+          }))
+        } catch {
+          return null
+        }
+      },
+      completeLesson: async (moduleId, lessonId) => {
         const completed = get().learning.completedLessons
         if (completed.includes(lessonId)) return
-
+        const response = await learningService.completeLesson(lessonId)
         set((state) => ({
-          learning: {
-            ...state.learning,
-            completedLessons: [...completed, lessonId]
-          },
-          user: {
-            ...state.user,
-            xp: state.user.xp + xpReward
-          }
+          learning: { ...state.learning, completedLessons: [...completed, lessonId] },
+          user: { ...state.user, xp: response.totalXP, level: response.level }
         }))
-        get().checkLevelUp()
+        return response
       },
 
       // Sandbox actions
-      buyAsset: (asset, quantity, price) => {
-        const totalCost = price * quantity
-        const currentBalance = get().user.virtualBalance
-
-        if (currentBalance < totalCost) return false
-
-        // Deduct balance
-        set((state) => ({
-          user: {
-            ...state.user,
-            virtualBalance: currentBalance - totalCost
-          }
+      syncSandbox: async () => {
+        const [assetsRes, portfolioRes, transactionsRes] = await Promise.all([
+          sandboxService.getAssets(),
+          sandboxService.getPortfolio(),
+          sandboxService.getTransactions()
+        ])
+        const portfolio = (portfolioRes.portfolio.holdings || []).map((holding) => ({
+          id: holding.assetId?.stableId || holding.assetId?._id || holding.assetId,
+          name: holding.assetId?.name,
+          category: holding.assetId?.category,
+          quantity: holding.quantity,
+          buyPrice: holding.averageBuyPrice,
+          currentPrice: holding.assetId?.currentPrice || holding.averageBuyPrice,
+          changePercent: holding.assetId?.percentChange24h || 0
         }))
-
-        // Update portfolio
-        const existingHolding = get().portfolio.find((h) => h.id === asset.id)
-        if (existingHolding) {
-          set((state) => ({
-            portfolio: state.portfolio.map((h) =>
-              h.id === asset.id
-                ? {
-                    ...h,
-                    quantity: h.quantity + quantity,
-                    buyPrice: Math.round(((h.buyPrice * h.quantity) + totalCost) / (h.quantity + quantity))
-                  }
-                : h
-            )
-          }))
-        } else {
-          set((state) => ({
-            portfolio: [
-              ...state.portfolio,
-              {
-                id: asset.id,
-                name: asset.name,
-                category: asset.category,
-                quantity,
-                buyPrice: price,
-                currentPrice: price,
-                changePercent: asset.changePercent
-              }
-            ]
-          }))
-        }
-
-        // Add Transaction
-        const transaction = {
-          id: Math.random().toString(36).substring(2, 9),
-          assetId: asset.id,
-          assetName: asset.name,
-          type: 'BUY',
-          quantity,
-          price,
-          date: new Date().toISOString()
-        }
-        set((state) => ({
-          transactions: [transaction, ...state.transactions]
+        const transactions = (transactionsRes.transactions || []).map((tx) => ({
+          id: tx._id,
+          assetId: tx.assetId?.stableId || tx.assetId?._id,
+          assetName: tx.assetId?.name,
+          type: tx.type.toUpperCase(),
+          quantity: tx.quantity,
+          price: tx.pricePerUnit,
+          date: tx.createdAt
         }))
-
+        set((state) => ({
+          assets: assetsRes.assets,
+          portfolio,
+          transactions,
+          user: { ...state.user, virtualBalance: portfolioRes.portfolio.virtualBalance }
+        }))
+      },
+      buyAsset: async (asset, quantity) => {
+        await sandboxService.buyAsset(asset.id || asset._id, quantity)
+        await get().syncSandbox()
         return true
       },
 
-      sellAsset: (assetId, quantity, price) => {
-        const holding = get().portfolio.find((h) => h.id === assetId)
-        if (!holding || holding.quantity < quantity) return false
-
-        const saleValue = price * quantity
-        const currentBalance = get().user.virtualBalance
-
-        // Add balance
-        set((state) => ({
-          user: {
-            ...state.user,
-            virtualBalance: currentBalance + saleValue
-          }
-        }))
-
-        // Update portfolio
-        if (holding.quantity === quantity) {
-          set((state) => ({
-            portfolio: state.portfolio.filter((h) => h.id !== assetId)
-          }))
-        } else {
-          set((state) => ({
-            portfolio: state.portfolio.map((h) =>
-              h.id === assetId
-                ? {
-                    ...h,
-                    quantity: h.quantity - quantity
-                  }
-                : h
-            )
-          }))
-        }
-
-        // Add Transaction
-        const transaction = {
-          id: Math.random().toString(36).substring(2, 9),
-          assetId,
-          assetName: holding.name,
-          type: 'SELL',
-          quantity,
-          price,
-          date: new Date().toISOString()
-        }
-        set((state) => ({
-          transactions: [transaction, ...state.transactions]
-        }))
-
+      sellAsset: async (assetId, quantity) => {
+        await sandboxService.sellAsset(assetId, quantity)
+        await get().syncSandbox()
         return true
       },
 

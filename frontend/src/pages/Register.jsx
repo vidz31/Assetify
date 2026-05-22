@@ -6,6 +6,7 @@ import { GlassCard } from '@/components/ui/GlassCard'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Mail, Lock, User, ShieldCheck } from 'lucide-react'
+import { authService } from '@/services/api'
 
 export const Register = () => {
   const navigate = useNavigate()
@@ -18,13 +19,14 @@ export const Register = () => {
   const [errors, setErrors] = useState({})
   const [isLoading, setIsLoading] = useState(false)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     const currentErrors = {}
 
     if (!name) currentErrors.name = 'Cadet identifier name required.'
     if (!email) currentErrors.email = 'Email connection parameters required.'
     if (!password) currentErrors.password = 'Authentication key passphrase required.'
+    if (password.length < 6) currentErrors.password = 'Passphrase must be at least 6 characters.'
 
     if (Object.keys(currentErrors).length > 0) {
       setErrors(currentErrors)
@@ -34,17 +36,28 @@ export const Register = () => {
     setErrors({})
     setIsLoading(true)
 
-    // Simulate database lookup latency
-    setTimeout(() => {
-      setIsLoading(false)
-      register(name, email, password)
+    try {
+      const response = await authService.register(name, email, password)
+      
+      if (response.success) {
+        register(response.user)
+        toast({
+          title: 'Credentials Established',
+          description: 'Welcome to the platform. Complete onboarding setup.',
+          type: 'success'
+        })
+        navigate('/onboarding')
+      }
+    } catch (error) {
+      setErrors({ submit: error.message })
       toast({
-        title: 'Credentials Established',
-        description: 'Welcome to the platform. Complete onboarding setup.',
-        type: 'success'
+        title: 'Registration Failed',
+        description: error.message,
+        type: 'error'
       })
-      navigate('/onboarding')
-    }, 1500)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -97,6 +110,12 @@ export const Register = () => {
               error={errors.password}
               icon={<Lock size={14} />}
             />
+
+            {errors.submit && (
+              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-sm">
+                {errors.submit}
+              </div>
+            )}
 
             <Button type="submit" isLoading={isLoading} className="w-full mt-2">
               Establish Credentials

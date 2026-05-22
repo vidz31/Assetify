@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { useAssetifyStore } from '@/store/useAssetifyStore'
 import { useToastStore } from '@/store/useToastStore'
-import { COURSES_DATA } from '@/constants/mockData'
+import { learningService } from '@/services/api'
 import { GlassCard } from '@/components/ui/GlassCard'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -25,12 +25,19 @@ export const Learning = () => {
   const [quizSubmitted, setQuizSubmitted] = useState(false)
   const [wrongAnswersCount, setWrongAnswersCount] = useState(0)
   const [lessonFinished, setLessonFinished] = useState(false)
+  const [modules, setModules] = useState([])
+
+  useEffect(() => {
+    learningService.getModules()
+      .then((response) => setModules(response.modules || []))
+      .catch((error) => toast({ title: 'Academy Load Failed', description: error.message, type: 'error' }))
+  }, [toast])
 
   // Filter modules
   const filteredModules = useMemo(() => {
-    if (activeCategory === 'all') return COURSES_DATA
-    return COURSES_DATA.filter((m) => m.category === activeCategory)
-  }, [activeCategory])
+    if (activeCategory === 'all') return modules
+    return modules.filter((m) => m.category === activeCategory)
+  }, [activeCategory, modules])
 
   const categoryIcons = {
     'real-estate': <Building2 size={14} />,
@@ -71,7 +78,7 @@ export const Learning = () => {
     }
   }
 
-  const handleNextQuestion = () => {
+  const handleNextQuestion = async () => {
     setSelectedOption(null)
     setQuizSubmitted(false)
     
@@ -85,14 +92,21 @@ export const Learning = () => {
       const isAlreadyCompleted = learning.completedLessons.includes(selectedLesson.id)
       
       // Save state
-      completeLesson('dummy-module', selectedLesson.id, earnedXP)
-      setLessonFinished(true)
-
-      toast({
-        title: isAlreadyCompleted ? 'Lesson Reviewed' : 'Lesson Mastered!',
-        description: `You earned +${earnedXP} XP. Keep up the streak!`,
-        type: 'gold'
-      })
+      try {
+        await completeLesson('academy', selectedLesson.id, earnedXP)
+        setLessonFinished(true)
+        toast({
+          title: isAlreadyCompleted ? 'Lesson Reviewed' : 'Lesson Mastered!',
+          description: `Your lesson progress was saved to the database.`,
+          type: 'gold'
+        })
+      } catch (error) {
+        toast({
+          title: 'Progress Save Failed',
+          description: error.message,
+          type: 'error'
+        })
+      }
     }
   }
 
@@ -115,7 +129,7 @@ export const Learning = () => {
         <div className="flex items-center gap-3 bg-surface border border-border px-3.5 py-1.5 rounded-xl">
           <Clock size={13} className="text-text-muted" />
           <span className="text-[10px] text-text-secondary font-semibold">
-            {learning.completedLessons.length} of {COURSES_DATA.reduce((sum, c) => sum + c.lessons.length, 0)} completed
+            {learning.completedLessons.length} of {modules.reduce((sum, c) => sum + c.lessons.length, 0)} completed
           </span>
         </div>
       </GlassCard>

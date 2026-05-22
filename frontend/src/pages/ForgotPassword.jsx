@@ -5,6 +5,7 @@ import { GlassCard } from '@/components/ui/GlassCard'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Mail, ShieldAlert } from 'lucide-react'
+import { authService } from '@/services/api'
 
 export const ForgotPassword = () => {
   const { toast } = useToastStore()
@@ -12,7 +13,7 @@ export const ForgotPassword = () => {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!email) {
       setError('Email address required to verify cadet.')
@@ -22,15 +23,22 @@ export const ForgotPassword = () => {
     setError('')
     setIsLoading(true)
 
-    // Simulate database lookup latency
-    setTimeout(() => {
-      setIsLoading(false)
+    try {
+      await authService.forgotPassword(email)
       toast({
         title: 'Recovery Key Sent',
         description: `Reset passphrase link sent to ${email}. Check mailbox.`,
         type: 'info'
       })
-    }, 1500)
+    } catch (error) {
+      toast({
+        title: 'Recovery Failed',
+        description: error.message,
+        type: 'error'
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
